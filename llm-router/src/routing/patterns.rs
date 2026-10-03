@@ -92,6 +92,13 @@ pub(super) static CATEGORY_PATTERNS: LazyLock<Vec<(RequestType, Vec<Regex>)>> = 
     },
 );
 
+/// A lexical-definition request is factual lookup even when it begins with "explain what";
+/// otherwise the broad code-understanding explanation pattern mislabels vocabulary traps.
+pub(super) static TERM_DEFINITION_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(explain|define|what does)\b.{0,40}\b(word|term|phrase)\b.{0,40}\b(mean|means|meaning)\b")
+        .expect("term definition classifier regex is valid")
+});
+
 // --------------------------------------------------------------------------
 // Feedback signal patterns — port of classifier/signals.rs
 // --------------------------------------------------------------------------

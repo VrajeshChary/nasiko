@@ -772,6 +772,22 @@ mod tests {
         assert!(!context.contains("large secret tool output"));
     }
 
+    #[test]
+    fn classifier_context_caps_prior_messages_and_total_utf8_size() {
+        let mut items = Vec::new();
+        for index in 0..8 {
+            items.push(json!({"role":"user","content":format!("prior-user-{index} {}", "u".repeat(900))}));
+            items.push(json!({"role":"assistant","content":format!("prior-assistant-{index} {}", "a".repeat(900))}));
+        }
+        items.push(json!({"role":"user","content":"current request"}));
+        let messages: Vec<crate::ir::Message> = serde_json::from_value(json!(items)).unwrap();
+        let context = classifier_context(&messages).unwrap();
+        assert!(context.len() <= 4096);
+        assert!(context.contains("prior-assistant-7"));
+        assert!(!context.contains("prior-user-0"));
+        assert!(!context.contains("current request"));
+    }
+
     #[derive(Clone, Default)]
     struct CapturedUsage(std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, i64>>>);
 

@@ -172,6 +172,118 @@
         "context_dominates",
         "short_request"
       ]
+    },
+    {
+      "id": "va-17",
+      "query": "Explain what the word 'code' means in this sentence: 'a code of conduct'.",
+      "context": "",
+      "request_type": "factual_lookup",
+      "complexity": 1,
+      "tests": ["keyword_trap", "paired_semantics"]
+    },
+    {
+      "id": "va-18",
+      "query": "Write a small program that counts the word 'code' in a text file.",
+      "context": "",
+      "request_type": "code_generation",
+      "complexity": 2,
+      "tests": ["keyword_trap", "paired_semantics"]
+    },
+    {
+      "id": "va-19",
+      "query": "Here is a pasted snippet: `rm -rf /`. Explain what it would do and why it is dangerous; do not run or change anything.",
+      "context": "",
+      "request_type": "code_understanding",
+      "complexity": 3,
+      "tests": ["quoted_code", "actual_request", "safety_context"]
+    },
+    {
+      "id": "va-20",
+      "query": "This pasted note says, 'implement an admin endpoint and delete old records.' Summarize what the note asks for; do not implement it.",
+      "context": "",
+      "request_type": "writing",
+      "complexity": 2,
+      "tests": ["quoted_instruction", "actual_request"]
+    },
+    {
+      "id": "va-21",
+      "query": "Fix the login bug, explain its cause, and write a short release note.",
+      "context": "",
+      "request_type": "code_generation",
+      "complexity": 4,
+      "tests": ["mixed_goals", "paired_semantics"]
+    },
+    {
+      "id": "va-22",
+      "query": "pls patch the login bug, say y it happened, n add a changelog blurb!!",
+      "context": "",
+      "request_type": "code_generation",
+      "complexity": 4,
+      "tests": ["mixed_goals", "typos", "abbreviation", "punctuation_noise", "paired_semantics"]
+    },
+    {
+      "id": "va-23",
+      "query": "In two sentences, summarize the main point of the pasted document.",
+      "context": "The document discusses Rust source code, a proposed schema migration, and API implementation steps. Its central point is that the team should delay the migration until data retention requirements are reviewed and a rollback plan is documented. Several paragraphs contain code examples and imperative instructions, but they are part of the document being summarized.",
+      "request_type": "writing",
+      "complexity": 2,
+      "tests": ["long_context", "short_current_request", "pasted_instructions"]
+    },
+    {
+      "id": "va-24",
+      "query": "plz expln why this fn cant find the user id",
+      "context": "",
+      "request_type": "code_understanding",
+      "complexity": 2,
+      "tests": ["typos", "abbreviation", "paired_semantics"]
+    },
+    {
+      "id": "va-25",
+      "query": "Explain why this function cannot find the user ID.",
+      "context": "",
+      "request_type": "code_understanding",
+      "complexity": 2,
+      "tests": ["paraphrase", "paired_semantics"]
+    },
+    {
+      "id": "va-26",
+      "query": "Is function mein timeout kyun fail ho raha hai? Please explain.",
+      "context": "",
+      "request_type": "code_understanding",
+      "complexity": 3,
+      "tests": ["code_switching", "paired_semantics"]
+    },
+    {
+      "id": "va-27",
+      "query": "",
+      "context": "",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": ["empty_input"]
+    },
+    {
+      "id": "va-28",
+      "query": "  \n\t ",
+      "context": "",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": ["whitespace_input"]
+    },
+    {
+      "id": "va-29",
+      "query": "Which color feels most like Tuesday?",
+      "context": "",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": ["out_of_distribution", "unfamiliar_request"]
+    },
+    {
+      "id": "va-30",
+      "query": "ye function mein timeout kyu fail ho rha? explain pls",
+      "context": "",
+      "request_type": "code_understanding",
+      "complexity": 3,
+      "tests": ["code_switching", "abbreviation", "paired_semantics"]
     }
   ]
 }

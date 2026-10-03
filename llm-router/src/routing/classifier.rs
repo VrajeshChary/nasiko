@@ -32,7 +32,9 @@ use std::collections::HashMap;
 use rand::Rng;
 use rand_distr::{Beta, Distribution};
 
-use super::patterns::{CATEGORY_PATTERNS, NEGATIVE_SIGNALS, POSITIVE_SIGNALS};
+use super::patterns::{
+    CATEGORY_PATTERNS, NEGATIVE_SIGNALS, POSITIVE_SIGNALS, TERM_DEFINITION_PATTERN,
+};
 
 /// Coarse model strength tier. Tier 1 = most capable (complex queries), Tier 3 = smallest
 /// (very simple queries), Tier 2 = in between.
@@ -417,6 +419,9 @@ const TIER_ARMS: [TierArm; 3] = [
 /// patterns wins, ties broken by declaration order, defaulting to `General`. Port of
 /// `categories.rs::classify`.
 pub fn classify_request_type(text: &str) -> RequestType {
+    if TERM_DEFINITION_PATTERN.is_match(text) {
+        return RequestType::FactualLookup;
+    }
     let mut best = RequestType::General;
     let mut best_score = 0usize;
     for (rt, pats) in CATEGORY_PATTERNS.iter() {
@@ -632,6 +637,20 @@ mod tests {
             FactualLookup
         );
         assert_eq!(classify_request_type("hello there"), General);
+    }
+
+    #[test]
+    fn vocabulary_about_code_is_not_misclassified_as_a_coding_task() {
+        assert_eq!(
+            classify_request_type("Explain what the word 'code' means in a code of conduct"),
+            RequestType::FactualLookup,
+        );
+        assert_eq!(
+            classify_request_type("Write a small program that counts the word 'code' in a file"),
+            RequestType::CodeGeneration,
+        );
+        assert_eq!(classify_request_type(""), RequestType::General);
+        assert_eq!(classify_request_type(" \n\t "), RequestType::General);
     }
 
     #[test]
@@ -907,6 +926,41 @@ mod request_classifier_tests {
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(1), classifier.classify(&input("write a Rust function")),
         ).await.unwrap().unwrap();
+        assert_eq!(result.request_type, RequestType::CodeGeneration);
+        assert_eq!(classifier.fallback_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn hosted_http_error_falls_back_to_regex() {
+        let mut server = mockito::Server::new_async().await;
+        let _request = server.mock("POST", "/v1/chat/completions")
+            .with_status(503)
+            .with_body("temporarily unavailable")
+            .create_async().await;
+        let hosted = HostedClassifier::new(
+            reqwest::Client::new(), server.url() + "/v1", "test-model".into(), None,
+            std::time::Duration::from_secs(1),
+        );
+        let classifier = FallbackClassifier::new(Box::new(hosted), 0.55);
+        let result = classifier.classify(&input("write a Rust function")).await.unwrap();
+        assert_eq!(result.request_type, RequestType::CodeGeneration);
+        assert_eq!(classifier.fallback_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn malformed_hosted_classification_falls_back_to_regex() {
+        let mut server = mockito::Server::new_async().await;
+        let _request = server.mock("POST", "/v1/chat/completions")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"choices":[{"message":{"content":"not valid json"}}]}"#)
+            .create_async().await;
+        let hosted = HostedClassifier::new(
+            reqwest::Client::new(), server.url() + "/v1", "test-model".into(), None,
+            std::time::Duration::from_secs(1),
+        );
+        let classifier = FallbackClassifier::new(Box::new(hosted), 0.55);
+        let result = classifier.classify(&input("write a Rust function")).await.unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(classifier.fallback_count(), 1);
     }
