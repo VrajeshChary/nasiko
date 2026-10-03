@@ -994,16 +994,25 @@ mod request_classifier_tests {
 
     #[tokio::test]
     async fn hosted_timeout_falls_back_within_the_configured_bound() {
-        let mut server = mockito::Server::new_async().await;
-        let _request = server.mock("POST", "/v1/chat/completions")
-            .with_delay(std::time::Duration::from_millis(200))
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(r#"{"choices":[{"message":{"content":"{\"request_type\":\"writing\",\"complexity\":2,\"confidence\":0.9}"}}]}"#)
-            .create_async().await;
+        use tokio::io::AsyncWriteExt;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                let body = r#"{"choices":[{"message":{"content":"{\"request_type\":\"writing\",\"complexity\":2,\"confidence\":0.9}"}}]}"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(response.as_bytes()).await;
+            }
+        });
         let hosted = HostedClassifier::new(
             reqwest::Client::new(),
-            server.url() + "/v1",
+            format!("http://{address}/v1"),
             "test-model".into(),
             None,
             std::time::Duration::from_millis(10),
