@@ -36,7 +36,7 @@ pub use boundary::{BoundarySignals, Mode, Phase};
 pub use cache::{CachedDecision, DecisionCache, NoopCache, RedisCache};
 pub use cells::{CellStore, InMemoryCellStore, PgCellStore};
 pub use classifier::{
-    ClassifyInput, Classification, ClassifierError, FallbackClassifier, HostedClassifier,
+    Classification, ClassifierError, ClassifyInput, FallbackClassifier, HostedClassifier,
     RegexClassifier, RequestClassifier, RequestType, Tier, build_request_classifier, classify,
     classify_request_type, signal,
 };
@@ -262,19 +262,35 @@ pub async fn route_model(
             let learned = cell_store.load(inputs.provider).await;
             let regex = classifier::RegexClassifier;
             let request_classifier = inputs.classifier.unwrap_or(&regex);
-            let classify_input = classifier::ClassifyInput { query, context: inputs.context };
+            let classify_input = classifier::ClassifyInput {
+                query,
+                context: inputs.context,
+            };
             let classification_started = std::time::Instant::now();
             let classification = match request_classifier.classify(&classify_input).await {
-                Ok(value) if (1..=5).contains(&value.complexity)
-                    && value.confidence.is_finite()
-                    && (0.0..=1.0).contains(&value.confidence) => value,
+                Ok(value)
+                    if (1..=5).contains(&value.complexity)
+                        && value.confidence.is_finite()
+                        && (0.0..=1.0).contains(&value.confidence) =>
+                {
+                    value
+                }
                 Ok(_) => {
-                    tracing::warn!(classifier = request_classifier.name(), "classifier returned out-of-range values; using regex fallback");
-                    regex.classify(&classify_input).await.expect("regex classifier is infallible")
+                    tracing::warn!(
+                        classifier = request_classifier.name(),
+                        "classifier returned out-of-range values; using regex fallback"
+                    );
+                    regex
+                        .classify(&classify_input)
+                        .await
+                        .expect("regex classifier is infallible")
                 }
                 Err(error) => {
                     tracing::warn!(classifier = request_classifier.name(), error = %error, "classifier failed at routing boundary; using regex fallback");
-                    regex.classify(&classify_input).await.expect("regex classifier is infallible")
+                    regex
+                        .classify(&classify_input)
+                        .await
+                        .expect("regex classifier is infallible")
                 }
             };
             tracing::info!(
@@ -298,7 +314,10 @@ pub async fn route_model(
             classification.complexity.hash(&mut hasher);
             let mut rng = rand::rngs::StdRng::seed_from_u64(hasher.finish());
             let tier = classifier::classify_assessment(
-                &learned, classification.request_type, classification.complexity, &mut rng,
+                &learned,
+                classification.request_type,
+                classification.complexity,
+                &mut rng,
             );
             let request_type = classification.request_type;
             // Per-config tier override takes priority over the global registry.

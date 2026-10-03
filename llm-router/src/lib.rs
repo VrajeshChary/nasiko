@@ -98,9 +98,8 @@ impl LlmRouterCtx {
     pub fn from_shared(db: PgPool, http: reqwest::Client) -> Self {
         let cfg = GatewayConfig::from_env();
         let classifier_settings = config::ClassifierConfig::from_env();
-        let request_classifier = routing::classifier::build_request_classifier(
-            &classifier_settings, http.clone(),
-        );
+        let request_classifier =
+            routing::classifier::build_request_classifier(&classifier_settings, http.clone());
         tracing::info!(
             target: "nasiko::llm_router::startup",
             classifier_backend = request_classifier.name(),

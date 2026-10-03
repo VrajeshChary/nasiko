@@ -125,10 +125,7 @@ pub enum ClassifierError {
 pub trait RequestClassifier: Send + Sync {
     fn name(&self) -> &str;
 
-    async fn classify(
-        &self,
-        input: &ClassifyInput<'_>,
-    ) -> Result<Classification, ClassifierError>;
+    async fn classify(&self, input: &ClassifyInput<'_>) -> Result<Classification, ClassifierError>;
 
     /// Number of model failures, timeouts, or low-confidence predictions replaced by regex.
     fn fallback_count(&self) -> u64 {
@@ -143,12 +140,11 @@ pub struct RegexClassifier;
 
 #[async_trait::async_trait]
 impl RequestClassifier for RegexClassifier {
-    fn name(&self) -> &str { "regex" }
+    fn name(&self) -> &str {
+        "regex"
+    }
 
-    async fn classify(
-        &self,
-        input: &ClassifyInput<'_>,
-    ) -> Result<Classification, ClassifierError> {
+    async fn classify(&self, input: &ClassifyInput<'_>) -> Result<Classification, ClassifierError> {
         Ok(Classification {
             request_type: classify_request_type(input.query),
             complexity: 3,
@@ -176,7 +172,13 @@ impl HostedClassifier {
         api_key: Option<String>,
         timeout: std::time::Duration,
     ) -> Self {
-        Self { client, endpoint, model, api_key, timeout }
+        Self {
+            client,
+            endpoint,
+            model,
+            api_key,
+            timeout,
+        }
     }
 }
 
@@ -200,12 +202,11 @@ fn classifier_query(input: &str) -> &str {
 
 #[async_trait::async_trait]
 impl RequestClassifier for HostedClassifier {
-    fn name(&self) -> &str { "hosted" }
+    fn name(&self) -> &str {
+        "hosted"
+    }
 
-    async fn classify(
-        &self,
-        input: &ClassifyInput<'_>,
-    ) -> Result<Classification, ClassifierError> {
+    async fn classify(&self, input: &ClassifyInput<'_>) -> Result<Classification, ClassifierError> {
         let system = concat!(
             "Classify the user's latest request. Return only a JSON object with keys ",
             "request_type, complexity, confidence. request_type must be one of: ",
@@ -222,15 +223,19 @@ impl RequestClassifier for HostedClassifier {
             "query": classifier_query(input.query),
             "context": input.context.unwrap_or("")
         });
-        let mut request = self.client.post(&endpoint).timeout(self.timeout).json(&serde_json::json!({
-            "model": self.model,
-            "temperature": 0,
-            "max_tokens": 128,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user.to_string()}
-            ]
-        }));
+        let mut request =
+            self.client
+                .post(&endpoint)
+                .timeout(self.timeout)
+                .json(&serde_json::json!({
+                    "model": self.model,
+                    "temperature": 0,
+                    "max_tokens": 128,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user.to_string()}
+                    ]
+                }));
         if let Some(key) = self.api_key.as_deref().filter(|key| !key.is_empty()) {
             request = request.bearer_auth(key);
         }
@@ -239,15 +244,22 @@ impl RequestClassifier for HostedClassifier {
                 .header("HTTP-Referer", "https://waitlist.nasiko.com/")
                 .header("X-OpenRouter-Title", "Nasiko");
         }
-        let response = request.send().await
+        let response = request
+            .send()
+            .await
             .map_err(|e| ClassifierError::Backend(e.to_string()))?
             .error_for_status()
             .map_err(|e| ClassifierError::Backend(e.to_string()))?;
-        let body: serde_json::Value = response.json().await
+        let body: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| ClassifierError::InvalidOutput(e.to_string()))?;
-        let content = body.pointer("/choices/0/message/content")
+        let content = body
+            .pointer("/choices/0/message/content")
             .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| ClassifierError::InvalidOutput("missing choices[0].message.content".into()))?;
+            .ok_or_else(|| {
+                ClassifierError::InvalidOutput("missing choices[0].message.content".into())
+            })?;
         parse_classification(content)
     }
 }
@@ -256,7 +268,9 @@ fn chat_completions_endpoint(base: &str) -> Result<String, ClassifierError> {
     let mut url = reqwest::Url::parse(base)
         .map_err(|e| ClassifierError::Backend(format!("invalid classifier endpoint: {e}")))?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
-        return Err(ClassifierError::Backend("classifier endpoint must use http or https".into()));
+        return Err(ClassifierError::Backend(
+            "classifier endpoint must use http or https".into(),
+        ));
     }
     let path = url.path().trim_end_matches('/');
     if !path.ends_with("/chat/completions") {
@@ -268,16 +282,30 @@ fn chat_completions_endpoint(base: &str) -> Result<String, ClassifierError> {
 fn parse_classification(content: &str) -> Result<Classification, ClassifierError> {
     let value: serde_json::Value = serde_json::from_str(content.trim())
         .map_err(|e| ClassifierError::InvalidOutput(e.to_string()))?;
-    let request_type = value.get("request_type").and_then(serde_json::Value::as_str)
+    let request_type = value
+        .get("request_type")
+        .and_then(serde_json::Value::as_str)
         .and_then(RequestType::from_wire)
         .ok_or_else(|| ClassifierError::InvalidOutput("unknown or missing request_type".into()))?;
-    let complexity = value.get("complexity").and_then(serde_json::Value::as_u64)
+    let complexity = value
+        .get("complexity")
+        .and_then(serde_json::Value::as_u64)
         .filter(|n| (1..=5).contains(n))
-        .ok_or_else(|| ClassifierError::InvalidOutput("complexity must be an integer from 1 to 5".into()))? as u8;
-    let confidence = value.get("confidence").and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| {
+            ClassifierError::InvalidOutput("complexity must be an integer from 1 to 5".into())
+        })? as u8;
+    let confidence = value
+        .get("confidence")
+        .and_then(serde_json::Value::as_f64)
         .filter(|n| n.is_finite() && (0.0..=1.0).contains(n))
-        .ok_or_else(|| ClassifierError::InvalidOutput("confidence must be between 0 and 1".into()))? as f32;
-    Ok(Classification { request_type, complexity, confidence })
+        .ok_or_else(|| {
+            ClassifierError::InvalidOutput("confidence must be between 0 and 1".into())
+        })? as f32;
+    Ok(Classification {
+        request_type,
+        complexity,
+        confidence,
+    })
 }
 
 /// Alternative-backend wrapper: fail closed to the legacy regex rules on errors, timeouts,
@@ -291,28 +319,39 @@ pub struct FallbackClassifier {
 
 impl FallbackClassifier {
     pub fn new(primary: Box<dyn RequestClassifier>, min_confidence: f32) -> Self {
-        Self { primary, fallback: RegexClassifier, min_confidence, fallbacks: std::sync::atomic::AtomicU64::new(0) }
+        Self {
+            primary,
+            fallback: RegexClassifier,
+            min_confidence,
+            fallbacks: std::sync::atomic::AtomicU64::new(0),
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl RequestClassifier for FallbackClassifier {
-    fn name(&self) -> &str { self.primary.name() }
+    fn name(&self) -> &str {
+        self.primary.name()
+    }
 
-    async fn classify(
-        &self,
-        input: &ClassifyInput<'_>,
-    ) -> Result<Classification, ClassifierError> {
+    async fn classify(&self, input: &ClassifyInput<'_>) -> Result<Classification, ClassifierError> {
         match self.primary.classify(input).await {
             Ok(result) if result.confidence >= self.min_confidence => Ok(result),
             Ok(result) => {
-                tracing::warn!(classifier = self.primary.name(), confidence = result.confidence, threshold = self.min_confidence, "classifier confidence below threshold; using regex fallback");
-                self.fallbacks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                tracing::warn!(
+                    classifier = self.primary.name(),
+                    confidence = result.confidence,
+                    threshold = self.min_confidence,
+                    "classifier confidence below threshold; using regex fallback"
+                );
+                self.fallbacks
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 self.fallback.classify(input).await
             }
             Err(error) => {
                 tracing::warn!(classifier = self.primary.name(), error = %error, "classifier failed; using regex fallback");
-                self.fallbacks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.fallbacks
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 self.fallback.classify(input).await
             }
         }
@@ -333,13 +372,18 @@ pub fn build_request_classifier(
         if let (Some(endpoint), Some(model)) = (&settings.endpoint, &settings.model) {
             return std::sync::Arc::new(FallbackClassifier::new(
                 Box::new(HostedClassifier::new(
-                    client, endpoint.clone(), model.clone(), settings.api_key.clone(),
+                    client,
+                    endpoint.clone(),
+                    model.clone(),
+                    settings.api_key.clone(),
                     settings.timeout,
                 )),
                 settings.min_confidence,
             ));
         }
-        tracing::warn!("hosted classifier selected without CLASSIFIER_ENDPOINT and CLASSIFIER_MODEL; using regex");
+        tracing::warn!(
+            "hosted classifier selected without CLASSIFIER_ENDPOINT and CLASSIFIER_MODEL; using regex"
+        );
     } else if !settings.backend.eq_ignore_ascii_case("regex") {
         tracing::warn!(backend = %settings.backend, "unknown CLASSIFIER_BACKEND; using regex");
     }
@@ -568,8 +612,7 @@ pub fn classify_assessment<R: Rng + ?Sized>(
     complexity: u8,
     rng: &mut R,
 ) -> Tier {
-    let quality_weight = (DEFAULT_W_QUALITY + (complexity as f64 - 3.0) * 0.06)
-        .clamp(0.50, 0.82);
+    let quality_weight = (DEFAULT_W_QUALITY + (complexity as f64 - 3.0) * 0.06).clamp(0.50, 0.82);
     let cost_weight = 1.0 - quality_weight;
     pick_model_thompson(cells, request_type, quality_weight, cost_weight, rng)
 }
@@ -820,7 +863,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod request_classifier_tests {
     use super::*;
@@ -830,23 +872,32 @@ mod request_classifier_tests {
 
     #[async_trait::async_trait]
     impl RequestClassifier for FixedClassifier {
-        fn name(&self) -> &str { "stub" }
+        fn name(&self) -> &str {
+            "stub"
+        }
 
         async fn classify(
             &self,
             _input: &ClassifyInput<'_>,
         ) -> Result<Classification, ClassifierError> {
-            self.0.map_err(|_| ClassifierError::Backend("stub failure".into()))
+            self.0
+                .map_err(|_| ClassifierError::Backend("stub failure".into()))
         }
     }
 
     fn input<'a>(query: &'a str) -> ClassifyInput<'a> {
-        ClassifyInput { query, context: Some("earlier turn") }
+        ClassifyInput {
+            query,
+            context: Some("earlier turn"),
+        }
     }
 
     #[tokio::test]
     async fn regex_baseline_keeps_legacy_category_and_documented_neutral_scores() {
-        let result = RegexClassifier.classify(&input("write a Rust function")).await.unwrap();
+        let result = RegexClassifier
+            .classify(&input("write a Rust function"))
+            .await
+            .unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(result.complexity, 3);
         assert_eq!(result.confidence, 0.5);
@@ -854,17 +905,35 @@ mod request_classifier_tests {
 
     #[test]
     fn hosted_output_fails_closed_on_unknown_or_out_of_range_values() {
-        assert!(parse_classification(r#"{"request_type":"secret","complexity":1,"confidence":0.9}"#).is_err());
-        assert!(parse_classification(r#"{"request_type":"general","complexity":6,"confidence":0.9}"#).is_err());
-        assert!(parse_classification(r#"{"request_type":"general","complexity":1,"confidence":1.1}"#).is_err());
+        assert!(
+            parse_classification(r#"{"request_type":"secret","complexity":1,"confidence":0.9}"#)
+                .is_err()
+        );
+        assert!(
+            parse_classification(r#"{"request_type":"general","complexity":6,"confidence":0.9}"#)
+                .is_err()
+        );
+        assert!(
+            parse_classification(r#"{"request_type":"general","complexity":1,"confidence":1.1}"#)
+                .is_err()
+        );
         assert!(parse_classification("not json").is_err());
     }
 
     #[test]
     fn base_urls_gain_the_openai_chat_completions_path_once() {
-        assert_eq!(chat_completions_endpoint("https://openrouter.ai/api/v1").unwrap(), "https://openrouter.ai/api/v1/chat/completions");
-        assert_eq!(chat_completions_endpoint("https://bedrock-mantle.us-east-1.api.aws/v1/").unwrap(), "https://bedrock-mantle.us-east-1.api.aws/v1/chat/completions");
-        assert_eq!(chat_completions_endpoint("https://proxy.example/v1/chat/completions").unwrap(), "https://proxy.example/v1/chat/completions");
+        assert_eq!(
+            chat_completions_endpoint("https://openrouter.ai/api/v1").unwrap(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+        assert_eq!(
+            chat_completions_endpoint("https://bedrock-mantle.us-east-1.api.aws/v1/").unwrap(),
+            "https://bedrock-mantle.us-east-1.api.aws/v1/chat/completions"
+        );
+        assert_eq!(
+            chat_completions_endpoint("https://proxy.example/v1/chat/completions").unwrap(),
+            "https://proxy.example/v1/chat/completions"
+        );
         assert!(chat_completions_endpoint("file:///tmp/model").is_err());
     }
 
@@ -881,9 +950,16 @@ mod request_classifier_tests {
 
     #[tokio::test]
     async fn backend_error_falls_back_and_increments_counter() {
-        let model_result = Classification { request_type: RequestType::Writing, complexity: 5, confidence: 0.99 };
+        let model_result = Classification {
+            request_type: RequestType::Writing,
+            complexity: 5,
+            confidence: 0.99,
+        };
         let classifier = FallbackClassifier::new(Box::new(FixedClassifier(Err(()))), 0.55);
-        let result = classifier.classify(&input("write a Rust function")).await.unwrap();
+        let result = classifier
+            .classify(&input("write a Rust function"))
+            .await
+            .unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(classifier.fallback_count(), 1);
         assert_ne!(result, model_result);
@@ -891,9 +967,16 @@ mod request_classifier_tests {
 
     #[tokio::test]
     async fn low_confidence_falls_back_and_increments_counter() {
-        let model_result = Classification { request_type: RequestType::Writing, complexity: 5, confidence: 0.2 };
+        let model_result = Classification {
+            request_type: RequestType::Writing,
+            complexity: 5,
+            confidence: 0.2,
+        };
         let classifier = FallbackClassifier::new(Box::new(FixedClassifier(Ok(model_result))), 0.55);
-        let result = classifier.classify(&input("write a Rust function")).await.unwrap();
+        let result = classifier
+            .classify(&input("write a Rust function"))
+            .await
+            .unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(classifier.fallback_count(), 1);
     }
@@ -919,13 +1002,20 @@ mod request_classifier_tests {
             .with_body(r#"{"choices":[{"message":{"content":"{\"request_type\":\"writing\",\"complexity\":2,\"confidence\":0.9}"}}]}"#)
             .create_async().await;
         let hosted = HostedClassifier::new(
-            reqwest::Client::new(), server.url() + "/v1", "test-model".into(), None,
+            reqwest::Client::new(),
+            server.url() + "/v1",
+            "test-model".into(),
+            None,
             std::time::Duration::from_millis(10),
         );
         let classifier = FallbackClassifier::new(Box::new(hosted), 0.55);
         let result = tokio::time::timeout(
-            std::time::Duration::from_secs(1), classifier.classify(&input("write a Rust function")),
-        ).await.unwrap().unwrap();
+            std::time::Duration::from_secs(1),
+            classifier.classify(&input("write a Rust function")),
+        )
+        .await
+        .unwrap()
+        .unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(classifier.fallback_count(), 1);
     }
@@ -933,16 +1023,24 @@ mod request_classifier_tests {
     #[tokio::test]
     async fn hosted_http_error_falls_back_to_regex() {
         let mut server = mockito::Server::new_async().await;
-        let _request = server.mock("POST", "/v1/chat/completions")
+        let _request = server
+            .mock("POST", "/v1/chat/completions")
             .with_status(503)
             .with_body("temporarily unavailable")
-            .create_async().await;
+            .create_async()
+            .await;
         let hosted = HostedClassifier::new(
-            reqwest::Client::new(), server.url() + "/v1", "test-model".into(), None,
+            reqwest::Client::new(),
+            server.url() + "/v1",
+            "test-model".into(),
+            None,
             std::time::Duration::from_secs(1),
         );
         let classifier = FallbackClassifier::new(Box::new(hosted), 0.55);
-        let result = classifier.classify(&input("write a Rust function")).await.unwrap();
+        let result = classifier
+            .classify(&input("write a Rust function"))
+            .await
+            .unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(classifier.fallback_count(), 1);
     }
@@ -950,17 +1048,25 @@ mod request_classifier_tests {
     #[tokio::test]
     async fn malformed_hosted_classification_falls_back_to_regex() {
         let mut server = mockito::Server::new_async().await;
-        let _request = server.mock("POST", "/v1/chat/completions")
+        let _request = server
+            .mock("POST", "/v1/chat/completions")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{"choices":[{"message":{"content":"not valid json"}}]}"#)
-            .create_async().await;
+            .create_async()
+            .await;
         let hosted = HostedClassifier::new(
-            reqwest::Client::new(), server.url() + "/v1", "test-model".into(), None,
+            reqwest::Client::new(),
+            server.url() + "/v1",
+            "test-model".into(),
+            None,
             std::time::Duration::from_secs(1),
         );
         let classifier = FallbackClassifier::new(Box::new(hosted), 0.55);
-        let result = classifier.classify(&input("write a Rust function")).await.unwrap();
+        let result = classifier
+            .classify(&input("write a Rust function"))
+            .await
+            .unwrap();
         assert_eq!(result.request_type, RequestType::CodeGeneration);
         assert_eq!(classifier.fallback_count(), 1);
     }

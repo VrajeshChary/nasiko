@@ -29,38 +29,65 @@ async fn main() {
     let regex = RegexClassifier;
     let mut out = std::io::BufWriter::new(std::fs::File::create(&out_path).expect("create OUT"));
     let mut latencies = Vec::with_capacity(examples.len());
-    let (mut model_correct, mut regex_correct, mut complexity_error, mut scored) = (0usize, 0usize, 0u64, 0usize);
+    let (mut model_correct, mut regex_correct, mut complexity_error, mut scored) =
+        (0usize, 0usize, 0u64, 0usize);
     for example in examples {
         let id = example["id"].as_str().expect("id");
         let query = example["query"].as_str().expect("query");
         let context = example["context"].as_str();
+        let expected_type = example["request_type"].as_str();
+        let expected_complexity = example["complexity"].as_u64();
         let input = ClassifyInput { query, context };
 
-        let baseline = regex.classify(&input).await.expect("regex classifier is infallible");
+        let baseline = regex
+            .classify(&input)
+            .await
+            .expect("regex classifier is infallible");
         let before_fallbacks = classifier.fallback_count();
         let started = Instant::now();
         let result = match classifier.classify(&input).await {
             Ok(result) => result,
             Err(error) => {
-                eprintln!("classifier {} failed on {id}: {error}; using regex", classifier.name());
+                eprintln!(
+                    "classifier {} failed on {id}: {error}; using regex",
+                    classifier.name()
+                );
                 baseline
             }
         };
         let latency_us = started.elapsed().as_micros() as u64;
         latencies.push(latency_us);
+        let request_type_correct =
+            expected_type.map(|expected| result.request_type.as_str() == expected);
+        let complexity_correct = expected_complexity
+            .and_then(|expected| u8::try_from(expected).ok())
+            .map(|expected| result.complexity == expected);
         if let (Some(expected_type), Some(expected_complexity)) = (
-            example["request_type"].as_str(), example["complexity"].as_u64(),
+            expected_type,
+            expected_complexity.and_then(|n| u8::try_from(n).ok()),
         ) {
             scored += 1;
-            model_correct += if result.request_type.as_str() == expected_type { 1 } else { 0 };
-            regex_correct += if baseline.request_type.as_str() == expected_type { 1 } else { 0 };
-            complexity_error += u64::from(result.complexity.abs_diff(expected_complexity as u8));
+            model_correct += if result.request_type.as_str() == expected_type {
+                1
+            } else {
+                0
+            };
+            regex_correct += if baseline.request_type.as_str() == expected_type {
+                1
+            } else {
+                0
+            };
+            complexity_error += u64::from(result.complexity.abs_diff(expected_complexity));
         }
         let line = serde_json::json!({
             "id": id,
             "request_type": result.request_type.as_str(),
             "complexity": result.complexity,
             "confidence": result.confidence,
+            "expected_request_type": expected_type,
+            "expected_complexity": expected_complexity,
+            "request_type_correct": request_type_correct,
+            "complexity_correct": complexity_correct,
             "latency_us": latency_us,
             "classifier": classifier.name(),
             "fallback": classifier.fallback_count() > before_fallbacks,
@@ -76,16 +103,23 @@ async fn main() {
     out.flush().expect("flush OUT");
     if !latencies.is_empty() {
         latencies.sort_unstable();
-        let percentile = |p: usize| latencies[((latencies.len() - 1) * p / 100).min(latencies.len() - 1)];
+        let percentile =
+            |p: usize| latencies[((latencies.len() - 1) * p / 100).min(latencies.len() - 1)];
         let fallback_rate = classifier.fallback_count() as f64 / examples.len() as f64;
         eprintln!(
             "classifier={} cases={} p50_us={} p95_us={} fallback_rate={:.3}",
-            classifier.name(), examples.len(), percentile(50), percentile(95), fallback_rate
+            classifier.name(),
+            examples.len(),
+            percentile(50),
+            percentile(95),
+            fallback_rate
         );
         if scored > 0 {
             eprintln!(
                 "labelled_cases={} request_type_accuracy={:.3} regex_accuracy={:.3} complexity_mae={:.3}",
-                scored, model_correct as f64 / scored as f64, regex_correct as f64 / scored as f64,
+                scored,
+                model_correct as f64 / scored as f64,
+                regex_correct as f64 / scored as f64,
                 complexity_error as f64 / scored as f64
             );
         }

@@ -867,18 +867,38 @@ fn log_response_usage(
 
 fn classifier_context(input: Option<&Value>) -> Option<String> {
     let items = input.and_then(Value::as_array)?;
-    let latest_user = items.iter().rposition(|item| item.get("role").and_then(Value::as_str) == Some("user"))?;
-    let mut turns = items[..latest_user].iter().rev()
-        .filter(|item| matches!(item.get("role").and_then(Value::as_str), Some("user" | "assistant")))
-        .take(6).collect::<Vec<_>>();
+    let latest_user = items
+        .iter()
+        .rposition(|item| item.get("role").and_then(Value::as_str) == Some("user"))?;
+    let mut turns = items[..latest_user]
+        .iter()
+        .rev()
+        .filter(|item| {
+            matches!(
+                item.get("role").and_then(Value::as_str),
+                Some("user" | "assistant")
+            )
+        })
+        .take(6)
+        .collect::<Vec<_>>();
     turns.reverse();
-    let joined = turns.into_iter().filter_map(|item| {
-        let role = item.get("role")?.as_str()?;
-        let content = content_text(item.get("content")?)?;
-        Some(format!("{role}: {content}"))
-    }).collect::<Vec<_>>().join("\n");
-    if joined.is_empty() { return None; }
-    let start = joined.char_indices().find(|(i, _)| joined.len() - i <= 4096).map(|(i, _)| i).unwrap_or(joined.len());
+    let joined = turns
+        .into_iter()
+        .filter_map(|item| {
+            let role = item.get("role")?.as_str()?;
+            let content = content_text(item.get("content")?)?;
+            Some(format!("{role}: {content}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if joined.is_empty() {
+        return None;
+    }
+    let start = joined
+        .char_indices()
+        .find(|(i, _)| joined.len() - i <= 4096)
+        .map(|(i, _)| i)
+        .unwrap_or(joined.len());
     Some(joined[start..].to_string())
 }
 

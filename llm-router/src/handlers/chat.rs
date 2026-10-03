@@ -64,13 +64,27 @@ pub(crate) struct RequestSignals {
 /// At most six prior user/assistant turns and 4 KiB are sent to the classifier. Tool
 /// outputs are excluded because they can be huge and may contain untrusted text.
 fn classifier_context(messages: &[crate::ir::Message]) -> Option<String> {
-    let mut turns = messages.iter().filter(|m| matches!(m.role.as_str(), "user" | "assistant"))
-        .rev().skip(1).take(6).collect::<Vec<_>>();
+    let mut turns = messages
+        .iter()
+        .filter(|m| matches!(m.role.as_str(), "user" | "assistant"))
+        .rev()
+        .skip(1)
+        .take(6)
+        .collect::<Vec<_>>();
     turns.reverse();
-    let joined = turns.into_iter().filter_map(|m| m.text().map(|text| format!("{}: {}", m.role, text)))
-        .collect::<Vec<_>>().join("\n");
-    if joined.is_empty() { return None; }
-    let start = joined.char_indices().find(|(i, _)| joined.len() - i <= 4096).map(|(i, _)| i).unwrap_or(joined.len());
+    let joined = turns
+        .into_iter()
+        .filter_map(|m| m.text().map(|text| format!("{}: {}", m.role, text)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if joined.is_empty() {
+        return None;
+    }
+    let start = joined
+        .char_indices()
+        .find(|(i, _)| joined.len() - i <= 4096)
+        .map(|(i, _)| i)
+        .unwrap_or(joined.len());
     Some(joined[start..].to_string())
 }
 
@@ -764,7 +778,8 @@ mod tests {
             {"role":"assistant","content":"Earlier answer"},
             {"role":"tool","content":"large secret tool output"},
             {"role":"user","content":"Current request"}
-        ])).unwrap();
+        ]))
+        .unwrap();
         let context = classifier_context(&messages).unwrap();
         assert!(context.contains("Earlier request"));
         assert!(context.contains("Earlier answer"));
@@ -776,7 +791,9 @@ mod tests {
     fn classifier_context_caps_prior_messages_and_total_utf8_size() {
         let mut items = Vec::new();
         for index in 0..8 {
-            items.push(json!({"role":"user","content":format!("prior-user-{index} {}", "u".repeat(900))}));
+            items.push(
+                json!({"role":"user","content":format!("prior-user-{index} {}", "u".repeat(900))}),
+            );
             items.push(json!({"role":"assistant","content":format!("prior-assistant-{index} {}", "a".repeat(900))}));
         }
         items.push(json!({"role":"user","content":"current request"}));

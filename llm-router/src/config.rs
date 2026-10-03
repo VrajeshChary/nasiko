@@ -21,17 +21,38 @@ pub struct ClassifierConfig {
 impl ClassifierConfig {
     pub fn from_env() -> Self {
         let backend = std::env::var("CLASSIFIER_BACKEND").unwrap_or_else(|_| "regex".into());
-        let endpoint = std::env::var("CLASSIFIER_ENDPOINT").ok().filter(|v| !v.trim().is_empty());
-        let model = std::env::var("CLASSIFIER_MODEL").ok().filter(|v| !v.trim().is_empty());
-        let api_key = std::env::var("CLASSIFIER_API_KEY").ok().filter(|v| !v.is_empty());
+        let endpoint = std::env::var("CLASSIFIER_ENDPOINT")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        let model = std::env::var("CLASSIFIER_MODEL")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        let api_key = std::env::var("CLASSIFIER_API_KEY")
+            .ok()
+            .filter(|v| !v.is_empty());
         let timeout_ms = std::env::var("CLASSIFIER_TIMEOUT_MS")
-            .ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(2500).clamp(100, 30_000);
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(2500)
+            .clamp(100, 30_000);
         let min_confidence = std::env::var("CLASSIFIER_MIN_CONFIDENCE")
-            .ok().and_then(|v| v.parse::<f32>().ok())
-            .filter(|v| v.is_finite() && (0.0..=1.0).contains(v)).unwrap_or(0.55);
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            .unwrap_or(0.55);
         let tier_seed = std::env::var("CLASSIFIER_TIER_SEED")
-            .ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
-        Self { backend, endpoint, model, api_key, timeout: std::time::Duration::from_millis(timeout_ms), min_confidence, tier_seed }
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        Self {
+            backend,
+            endpoint,
+            model,
+            api_key,
+            timeout: std::time::Duration::from_millis(timeout_ms),
+            min_confidence,
+            tier_seed,
+        }
     }
 }
 
