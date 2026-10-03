@@ -1,0 +1,174 @@
+{
+  "schema_version": "nasiko-classifier-labeled-v1",
+  "purpose": "hand-authored P2 classifier examples",
+  "examples": [
+    {
+      "id": "tr-01",
+      "query": "Fix the typo in this comment: `// retrun cached value`.",
+      "context": "The code is already correct otherwise.",
+      "request_type": "code_generation",
+      "complexity": 1,
+      "tests": [
+        "short_request",
+        "code_keyword_low_effort"
+      ]
+    },
+    {
+      "id": "tr-02",
+      "query": "Add a retry policy with exponential backoff to this Rust HTTP client.",
+      "context": "It should stop after five attempts and preserve the last error.",
+      "request_type": "code_generation",
+      "complexity": 3,
+      "tests": [
+        "implementation",
+        "constraints"
+      ]
+    },
+    {
+      "id": "tr-03",
+      "query": "Walk me through why this recursive function returns zero for an empty list.",
+      "context": "Here is the function and its base case.",
+      "request_type": "code_understanding",
+      "complexity": 3,
+      "tests": [
+        "explanation",
+        "context"
+      ]
+    },
+    {
+      "id": "tr-04",
+      "query": "Compare a normalized relational schema with a document store for our order history.",
+      "context": "We need transactional updates and flexible product metadata.",
+      "request_type": "technical_design",
+      "complexity": 4,
+      "tests": [
+        "tradeoffs",
+        "multiple_constraints"
+      ]
+    },
+    {
+      "id": "tr-05",
+      "query": "If 3 of 12 requests fail independently, what is the probability that at least one fails? Show the steps.",
+      "context": "",
+      "request_type": "analytical_reasoning",
+      "complexity": 3,
+      "tests": [
+        "multi_step_calculation"
+      ]
+    },
+    {
+      "id": "tr-06",
+      "query": "Draft a concise release note for the new CSV export.",
+      "context": "Audience is existing customers; mention the date filter.",
+      "request_type": "writing",
+      "complexity": 2,
+      "tests": [
+        "writing",
+        "constraints"
+      ]
+    },
+    {
+      "id": "tr-07",
+      "query": "Who was the first person to walk on the Moon?",
+      "context": "",
+      "request_type": "factual_lookup",
+      "complexity": 1,
+      "tests": [
+        "short_fact"
+      ]
+    },
+    {
+      "id": "tr-08",
+      "query": "Hi there!",
+      "context": "",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": [
+        "greeting"
+      ]
+    },
+    {
+      "id": "tr-09",
+      "query": "Create a Python endpoint that validates an email address and returns a useful error.",
+      "context": "",
+      "request_type": "code_generation",
+      "complexity": 3,
+      "tests": [
+        "implementation"
+      ]
+    },
+    {
+      "id": "tr-10",
+      "query": "Explain what the word 'code' means in this sentence; do not write software.",
+      "context": "",
+      "request_type": "factual_lookup",
+      "complexity": 2,
+      "tests": [
+        "keyword_trap",
+        "quoted_text"
+      ]
+    },
+    {
+      "id": "tr-11",
+      "query": "Is function ka purpose samjhao: it caches the result before returning.",
+      "context": "Please explain the code in simple terms.",
+      "request_type": "code_understanding",
+      "complexity": 2,
+      "tests": [
+        "code_switching",
+        "paraphrase"
+      ]
+    },
+    {
+      "id": "tr-12",
+      "query": "Which of these two API designs is easier to version safely?",
+      "context": "Design A puts the version in the URL; design B uses a header.",
+      "request_type": "technical_design",
+      "complexity": 3,
+      "tests": [
+        "contextual_design"
+      ]
+    },
+    {
+      "id": "tr-13",
+      "query": "Rewrite this paragraph so it sounds calm and professional.",
+      "context": "Keep all dates and names unchanged.",
+      "request_type": "writing",
+      "complexity": 2,
+      "tests": [
+        "rewrite",
+        "constraints"
+      ]
+    },
+    {
+      "id": "tr-14",
+      "query": "How many minutes are in 2.5 hours?",
+      "context": "",
+      "request_type": "analytical_reasoning",
+      "complexity": 1,
+      "tests": [
+        "simple_calculation"
+      ]
+    },
+    {
+      "id": "tr-15",
+      "query": "What is the capital of Kenya?",
+      "context": "",
+      "request_type": "factual_lookup",
+      "complexity": 1,
+      "tests": [
+        "short_fact"
+      ]
+    },
+    {
+      "id": "tr-16",
+      "query": "Can you help me think through this?",
+      "context": "No specific topic or goal has been provided.",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": [
+        "underspecified"
+      ]
+    }
+  ]
+}

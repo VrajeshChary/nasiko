@@ -82,6 +82,10 @@ pub struct LlmRouterCtx {
     /// classify + pin. [`ClassifierSalienceGate`] when `SALIENCE_GATE_ENABLED`; else [`AllowAllGate`]
     /// (classify at every boundary, i.e. behaviour before the gate existed).
     pub salience_gate: Arc<dyn SalienceGate>,
+    /// Configured request classifier, invoked only at safe routing boundaries.
+    pub request_classifier: Arc<dyn routing::classifier::RequestClassifier>,
+    /// Seed mixed with input identity for reproducible Thompson tier decisions.
+    pub classifier_tier_seed: u64,
     /// The platform's single cost engine. Every `token_usage` row is priced
     /// through this — the DB trigger that used to do it returned NULL for any
     /// model missing from `model_pricing`, which booked 92.8% of calls at $0.
@@ -93,6 +97,17 @@ impl LlmRouterCtx {
     /// client). Gateway-specific config is read from the environment.
     pub fn from_shared(db: PgPool, http: reqwest::Client) -> Self {
         let cfg = GatewayConfig::from_env();
+        let classifier_settings = config::ClassifierConfig::from_env();
+        let request_classifier = routing::classifier::build_request_classifier(
+            &classifier_settings, http.clone(),
+        );
+        tracing::info!(
+            target: "nasiko::llm_router::startup",
+            classifier_backend = request_classifier.name(),
+            classifier_timeout_ms = classifier_settings.timeout.as_millis() as u64,
+            classifier_min_confidence = classifier_settings.min_confidence,
+            "llm-router: request classifier initialized"
+        );
         tracing::info!(
             target: "nasiko::llm_router::startup",
             default_provider = %cfg.default_provider,
@@ -137,6 +152,8 @@ impl LlmRouterCtx {
             tier_registry,
             cell_store,
             salience_gate,
+            request_classifier,
+            classifier_tier_seed: classifier_settings.tier_seed,
             pricing,
         }
     }

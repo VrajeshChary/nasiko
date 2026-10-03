@@ -48,6 +48,8 @@ pub(crate) struct RequestSignals {
     /// Latest user turn's text — the classifier's `query` input (Level 3) for every agent,
     /// and (for a coding-agent integration) also the `conv_id` anchor for *this* turn.
     pub query: Option<String>,
+    /// Bounded earlier user/assistant turns for context-aware classification.
+    pub context: Option<String>,
     /// Count of top-level user turns so far. Combined with `query`, anchors a coding-agent's
     /// `conv_id` to the current turn rather than the whole session — see
     /// `BoundarySignals::for_coding_agent`'s doc comment for why that distinction matters.
@@ -57,6 +59,19 @@ pub(crate) struct RequestSignals {
     /// in-flight tool loop sticky. Only used when the resolved agent is a coding-agent
     /// integration.
     pub is_tool_continuation: bool,
+}
+
+/// At most six prior user/assistant turns and 4 KiB are sent to the classifier. Tool
+/// outputs are excluded because they can be huge and may contain untrusted text.
+fn classifier_context(messages: &[crate::ir::Message]) -> Option<String> {
+    let mut turns = messages.iter().filter(|m| matches!(m.role.as_str(), "user" | "assistant"))
+        .rev().skip(1).take(6).collect::<Vec<_>>();
+    turns.reverse();
+    let joined = turns.into_iter().filter_map(|m| m.text().map(|text| format!("{}: {}", m.role, text)))
+        .collect::<Vec<_>>().join("\n");
+    if joined.is_empty() { return None; }
+    let start = joined.char_indices().find(|(i, _)| joined.len() - i <= 4096).map(|(i, _)| i).unwrap_or(joined.len());
+    Some(joined[start..].to_string())
 }
 
 /// Record a call's four token classes on its `gen_ai` span.
@@ -194,6 +209,7 @@ async fn chat_core(
     };
     let signals = RequestSignals {
         query: routing::latest_user_query(&req.messages),
+        context: classifier_context(&req.messages),
         turn_ordinal: routing::user_turn_ordinal(&req.messages),
         is_tool_continuation: routing::is_tool_continuation(&req.messages),
     };
@@ -483,6 +499,9 @@ pub(crate) async fn resolve_routed_request(
             tier3_model: resolved.tier3_model.as_deref(),
             signals: &boundary,
             query: signals.query.as_deref(),
+            context: signals.context.as_deref(),
+            classifier: Some(ctx.request_classifier.as_ref()),
+            classification_seed: ctx.classifier_tier_seed,
         },
     )
     .await;
@@ -738,6 +757,21 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
+    #[test]
+    fn classifier_context_uses_prior_chat_but_skips_current_query_and_tool_output() {
+        let messages: Vec<crate::ir::Message> = serde_json::from_value(json!([
+            {"role":"user","content":"Earlier request"},
+            {"role":"assistant","content":"Earlier answer"},
+            {"role":"tool","content":"large secret tool output"},
+            {"role":"user","content":"Current request"}
+        ])).unwrap();
+        let context = classifier_context(&messages).unwrap();
+        assert!(context.contains("Earlier request"));
+        assert!(context.contains("Earlier answer"));
+        assert!(!context.contains("Current request"));
+        assert!(!context.contains("large secret tool output"));
+    }
+
     #[derive(Clone, Default)]
     struct CapturedUsage(std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, i64>>>);
 
@@ -957,6 +991,8 @@ mod tests {
             tier_registry: Arc::new(NoTiers),
             cell_store: Arc::new(crate::routing::InMemoryCellStore::new()),
             salience_gate: Arc::new(crate::routing::AllowAllGate),
+            request_classifier: Arc::new(crate::routing::RegexClassifier),
+            classifier_tier_seed: 0,
             pricing: Arc::new(nasiko_pricing::PricingEngine::new(
                 PgPool::connect_lazy("postgres://u:p@127.0.0.1:5999/none").unwrap(),
             )),
@@ -1440,6 +1476,7 @@ mod tests {
                 model: None,
             },
             RequestSignals {
+                context: None,
                 query: Some("write a function that reverses a string".into()),
                 turn_ordinal: 1,
                 is_tool_continuation: false,
@@ -1486,6 +1523,7 @@ mod tests {
                 model: None,
             },
             RequestSignals {
+                context: None,
                 query: Some("write a function that reverses a string".into()),
                 turn_ordinal: 1,
                 is_tool_continuation: false,

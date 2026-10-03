@@ -11,9 +11,11 @@
 //! ```
 //!
 //! The [classifier](classifier::classify) buckets the query into a request type and
-//! Thompson-samples a [`Tier`] over the provider's learned quality [cells](cells); feedback
-//! from the user's next turn ([`classifier::signal`]) is folded back into those cells, so the
-//! router learns which tier suffices for which kind of query. See [`route_model`].
+//! Thompson-samples a [`Tier`] over the provider's learned quality [cells](cells); the sample
+//! seed is stable for identical request inputs and state. Feedback from the user's next turn
+//! ([`classifier::signal`]) updates those cells, so later decisions can change. See [`route_model`].
+
+use rand::SeedableRng;
 
 pub mod attribution;
 pub mod boundary;
@@ -33,7 +35,11 @@ mod salience_classifier;
 pub use boundary::{BoundarySignals, Mode, Phase};
 pub use cache::{CachedDecision, DecisionCache, NoopCache, RedisCache};
 pub use cells::{CellStore, InMemoryCellStore, PgCellStore};
-pub use classifier::{RequestType, Tier, classify, classify_request_type, signal};
+pub use classifier::{
+    ClassifyInput, Classification, ClassifierError, FallbackClassifier, HostedClassifier,
+    RegexClassifier, RequestClassifier, RequestType, Tier, build_request_classifier, classify,
+    classify_request_type, signal,
+};
 pub use registry::{PgTierRegistry, TierRegistry};
 pub use salience::{AllowAllGate, ClassifierSalienceGate, SalienceGate};
 
@@ -83,6 +89,12 @@ pub struct RouteInputs<'a> {
     pub signals: &'a BoundarySignals,
     /// The query to classify (latest user message text). `None` disables classification.
     pub query: Option<&'a str>,
+    /// Bounded prior conversation context without tool output.
+    pub context: Option<&'a str>,
+    /// Configured classifier; `None` uses the legacy regex baseline.
+    pub classifier: Option<&'a dyn RequestClassifier>,
+    /// Host-configured base seed for deterministic tier sampling.
+    pub classification_seed: u64,
 }
 
 /// The outcome of routing: the model to call and how it was chosen.
@@ -245,15 +257,50 @@ pub async fn route_model(
                 agent_id = %inputs.agent_id, %conv_id, provider = %inputs.provider,
                 "route_model: LEVEL 3 (Classified) — at fireable boundary with a query; invoking classifier"
             );
-            // Load the provider's learned quality, then Thompson-sample a tier. Production
-            // uses an entropy RNG (exploration drives learning); tests seed it. The RNG
-            // (`ThreadRng`) is `!Send`, so it is scoped to drop before the next `.await` — the
-            // handler future must stay `Send`.
+            // Load the provider's learned quality, then Thompson-sample a tier. The RNG is
+            // derived deterministically from the configured seed and classification inputs.
             let learned = cell_store.load(inputs.provider).await;
-            let (tier, request_type) = {
-                let mut rng = rand::rng();
-                classify(query, inputs.provider, &learned, &mut rng)
+            let regex = classifier::RegexClassifier;
+            let request_classifier = inputs.classifier.unwrap_or(&regex);
+            let classify_input = classifier::ClassifyInput { query, context: inputs.context };
+            let classification_started = std::time::Instant::now();
+            let classification = match request_classifier.classify(&classify_input).await {
+                Ok(value) if (1..=5).contains(&value.complexity)
+                    && value.confidence.is_finite()
+                    && (0.0..=1.0).contains(&value.confidence) => value,
+                Ok(_) => {
+                    tracing::warn!(classifier = request_classifier.name(), "classifier returned out-of-range values; using regex fallback");
+                    regex.classify(&classify_input).await.expect("regex classifier is infallible")
+                }
+                Err(error) => {
+                    tracing::warn!(classifier = request_classifier.name(), error = %error, "classifier failed at routing boundary; using regex fallback");
+                    regex.classify(&classify_input).await.expect("regex classifier is infallible")
+                }
             };
+            tracing::info!(
+                target: "nasiko::llm_router::classifier",
+                classifier = request_classifier.name(),
+                request_type = classification.request_type.as_str(),
+                complexity = classification.complexity,
+                confidence = classification.confidence,
+                fallback_count = request_classifier.fallback_count(),
+                latency_us = classification_started.elapsed().as_micros() as u64,
+                "classifier: completed boundary decision"
+            );
+            // Complexity adjusts the existing quality/cost blend. Seeded Thompson sampling
+            // makes identical input and cell state produce the same tier.
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            inputs.classification_seed.hash(&mut hasher);
+            inputs.provider.hash(&mut hasher);
+            query.hash(&mut hasher);
+            classification.request_type.hash(&mut hasher);
+            classification.complexity.hash(&mut hasher);
+            let mut rng = rand::rngs::StdRng::seed_from_u64(hasher.finish());
+            let tier = classifier::classify_assessment(
+                &learned, classification.request_type, classification.complexity, &mut rng,
+            );
+            let request_type = classification.request_type;
             // Per-config tier override takes priority over the global registry.
             let config_override = match tier {
                 Tier::Tier1 => inputs.tier1_model.map(str::to_string),
@@ -532,6 +579,9 @@ mod tests {
             tier3_model: None,
             signals,
             query: Some("hello"),
+            context: None,
+            classifier: None,
+            classification_seed: 0,
         }
     }
 
@@ -572,8 +622,8 @@ mod tests {
 
     #[tokio::test]
     async fn level3_classifies_at_boundary_and_writes_cache() {
-        // The classifier now Thompson-samples a tier, so the exact tier is stochastic — but
-        // it must resolve to one of anthropic's seeded models and write that decision through
+        // The classifier uses deterministic seeded Thompson sampling; it must resolve to one
+        // of anthropic's seeded models and write that decision through
         // to the cache exactly once.
         let cache = FakeCache::empty();
         let s = signals(Some("c1"), Phase::Switch, Mode::FreeFlowing);

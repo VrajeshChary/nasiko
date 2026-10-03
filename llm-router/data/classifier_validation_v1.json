@@ -1,0 +1,177 @@
+{
+  "schema_version": "nasiko-classifier-labeled-v1",
+  "purpose": "hand-authored P2 classifier examples",
+  "examples": [
+    {
+      "id": "va-01",
+      "query": "Please patch the one misspelled word in this pasted snippet and leave everything else alone: `// succesful`.",
+      "context": "",
+      "request_type": "code_generation",
+      "complexity": 1,
+      "tests": [
+        "near_miss_regex",
+        "quoted_code"
+      ]
+    },
+    {
+      "id": "va-02",
+      "query": "This code compiles, but explain why the cache is never hit after the first request.",
+      "context": "The relevant logs are below; do not change the code.",
+      "request_type": "code_understanding",
+      "complexity": 3,
+      "tests": [
+        "diagnosis_request",
+        "pasted_context"
+      ]
+    },
+    {
+      "id": "va-03",
+      "query": "Our service has 40 tenants and 8 million events per day. Propose a retention and partitioning plan with tradeoffs.",
+      "context": "Compliance requires deletion within 30 days.",
+      "request_type": "technical_design",
+      "complexity": 5,
+      "tests": [
+        "long_context",
+        "multi_constraint"
+      ]
+    },
+    {
+      "id": "va-04",
+      "query": "Translate this request into a SQL query and explain the joins needed.",
+      "context": "Tables: customers, invoices, payments.",
+      "request_type": "code_generation",
+      "complexity": 3,
+      "tests": [
+        "mixed_intent",
+        "technical"
+      ]
+    },
+    {
+      "id": "va-05",
+      "query": "Write a short apology to a customer for the delayed shipment, without admitting fault.",
+      "context": "",
+      "request_type": "writing",
+      "complexity": 2,
+      "tests": [
+        "constrained_writing"
+      ]
+    },
+    {
+      "id": "va-06",
+      "query": "I have 18 workers, each completing 7 jobs per hour. How long for 630 jobs if work is evenly split?",
+      "context": "Show the arithmetic.",
+      "request_type": "analytical_reasoning",
+      "complexity": 2,
+      "tests": [
+        "multi_step_calculation"
+      ]
+    },
+    {
+      "id": "va-07",
+      "query": "When did the Berlin Wall fall?",
+      "context": "A pasted paragraph mentions software code several times.",
+      "request_type": "factual_lookup",
+      "complexity": 1,
+      "tests": [
+        "keyword_trap",
+        "irrelevant_context"
+      ]
+    },
+    {
+      "id": "va-08",
+      "query": "help",
+      "context": "",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": [
+        "empty_like",
+        "underspecified"
+      ]
+    },
+    {
+      "id": "va-09",
+      "query": "Fix the authentication bug, add a regression test, then summarize the change for the changelog.",
+      "context": "",
+      "request_type": "code_generation",
+      "complexity": 4,
+      "tests": [
+        "multi_intent",
+        "mixed_output"
+      ]
+    },
+    {
+      "id": "va-10",
+      "query": "Can you tell me the safest option?",
+      "context": "Prior context: We were choosing between two database migration plans. Plan A uses a short write lock; plan B has a longer dual-write phase.",
+      "request_type": "technical_design",
+      "complexity": 3,
+      "tests": [
+        "context_dominates",
+        "short_query"
+      ]
+    },
+    {
+      "id": "va-11",
+      "query": "Pls explane why this async fn hangs when the network is slow!!!",
+      "context": "It awaits a response without a timeout.",
+      "request_type": "code_understanding",
+      "complexity": 3,
+      "tests": [
+        "typos",
+        "punctuation_noise"
+      ]
+    },
+    {
+      "id": "va-12",
+      "query": "Suggest a simple vegetarian dinner for tonight.",
+      "context": "",
+      "request_type": "general",
+      "complexity": 2,
+      "tests": [
+        "out_of_distribution"
+      ]
+    },
+    {
+      "id": "va-13",
+      "query": "Is this proof valid? The claim is that the sum of two even integers is even.",
+      "context": "Give a short justification.",
+      "request_type": "analytical_reasoning",
+      "complexity": 2,
+      "tests": [
+        "reasoning"
+      ]
+    },
+    {
+      "id": "va-14",
+      "query": "Summarize the incident for the status page in two sentences.",
+      "context": "The database failover took 11 minutes; service is now healthy.",
+      "request_type": "writing",
+      "complexity": 2,
+      "tests": [
+        "contextual_writing"
+      ]
+    },
+    {
+      "id": "va-15",
+      "query": "What does 'idempotent' mean in this API documentation?",
+      "context": "Do not edit the API or generate code.",
+      "request_type": "factual_lookup",
+      "complexity": 2,
+      "tests": [
+        "quoted_term",
+        "code_keyword_low_effort"
+      ]
+    },
+    {
+      "id": "va-16",
+      "query": "Good morning!",
+      "context": "The prior conversation discussed a complex Rust refactor, but the current turn is only a greeting.",
+      "request_type": "general",
+      "complexity": 1,
+      "tests": [
+        "context_dominates",
+        "short_request"
+      ]
+    }
+  ]
+}
